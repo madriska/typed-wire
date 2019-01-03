@@ -17,6 +17,7 @@ import Data.Maybe
 import Data.Monoid
 import System.FilePath
 import qualified Data.List as L
+import qualified Data.Map as M
 import qualified Data.Text as T
 
 libraryInfo :: LibraryInfo
@@ -38,6 +39,8 @@ makeModule m =
     , ""
     , T.intercalate "\n" (map makeTypeDef $ m_typeDefs m)
     , T.intercalate "\n" (map makeApiDef $ m_apis m)
+    -- Add any extra code from 'ModuleName.extra.purs'
+    , M.findWithDefault "" "purs" (m_extraCode m)
     ]
 
 makeApiDef :: ApiDef -> T.Text
@@ -150,15 +153,14 @@ makeStructDef sd =
     , "   { " <> T.intercalate "\n   , " (map makeStructField $ sd_fields sd)
     , "   }"
     , ""
-    , "instance " <> eqName (sd_name sd) <> " :: "
-      <> tcPreds (sd_args sd) ["Eq"] <> "Eq (" <> fullType <> ") where "
-      <> "eq (" <> justType <> " a) (" <> justType <> " b) = "
-      <> T.intercalate " && " (map makeFieldEq (sd_fields sd))
+    , "derive instance " <> eqName (sd_name sd) <> " :: Eq (" <> fullType <> ")"
+    , "derive instance " <> ordName (sd_name sd) <> " :: Ord (" <> fullType <> ")"
+    , "derive instance " <> genericName (sd_name sd) <> " :: Generic (" <> fullType <> ") _"
     , "instance " <> showName (sd_name sd) <> " :: "
       <> tcPreds (sd_args sd) ["Show"] <> "Show (" <> fullType <> ") where "
-      <> "show (" <> justType <> " a) = " <> T.pack (show justType) <> " ++ \"{\" ++ "
-      <> T.intercalate " ++ \", \" ++ " (map makeFieldShow (sd_fields sd))
-      <> " ++ \"}\""
+      <> "show (" <> justType <> " a) = " <> T.pack (show justType) <> " <> \"{\" <> "
+      <> T.intercalate " <> \", \" <> " (map makeFieldShow (sd_fields sd))
+      <> " <> \"}\""
     , "instance " <> encoderName (sd_name sd) <> " :: "
       <> tcPreds (sd_args sd) ["EncodeJson"] <> "EncodeJson" <> " (" <> fullType <> ") where"
     , "    encodeJson (" <> unTypeName (sd_name sd) <> " objT) ="
@@ -174,7 +176,7 @@ makeStructDef sd =
     where
       makeFieldShow fld =
           let name = unFieldName $ sf_name fld
-          in  T.pack (show name) <> " ++ \": \" ++ show a." <> name
+          in  T.pack (show name) <> " <> \": \" <> show a." <> name
       makeFieldEq fld =
           let name = unFieldName $ sf_name fld
           in  "a." <> name <> " == " <> "b." <> name
