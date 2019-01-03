@@ -3,6 +3,7 @@
 module TW.Ast where
 
 import Network.HTTP.Types.Method
+import Data.Map (Map)
 import qualified Data.Text as T
 
 newtype ModuleName
@@ -56,6 +57,10 @@ data Module
    , m_imports :: [Import]
    , m_typeDefs :: [TypeDef]
    , m_apis :: [ApiDef]
+   -- | Map a file extension ('hs') to any extra code placed in a sideload file
+   -- (e.g., types/Foo/Bar.tywi looks at types/Foo/Bar.extras.*). This code is
+   -- appended to the end of the generated files.
+   , m_extraCode :: Map T.Text T.Text
    } deriving (Show, Eq)
 
 data ApiDef

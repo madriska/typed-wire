@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module TW.CodeGen.Haskell
@@ -53,6 +54,8 @@ makeModule m =
     , ""
     , T.intercalate "\n" (map makeTypeDef $ m_typeDefs m)
     , T.intercalate "\n" (map makeApiDef $ m_apis m)
+    -- Add any extra code from 'ModuleName.extra.hs'
+    , M.findWithDefault "" "hs" (m_extraCode m)
     ]
 
 makeImport :: Import -> T.Text

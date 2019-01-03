@@ -8,9 +8,12 @@ import Control.Monad.Except
 import Data.Maybe
 import System.Directory
 import System.FilePath
+import System.FilePath.Glob (glob)
 import qualified Data.List as L
+import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 loadModules :: [FilePath] -> [ModuleName] -> IO (Either String [Module])
 loadModules srcDirs entryPoints =
@@ -54,10 +57,25 @@ getModuleFp srcDirs m@(ModuleName comps) =
          _ ->
              throwError $ errPrefix ++ "multiple possibilities found: " ++ L.intercalate ", " discovered
 
+-- | Given a FilePath to a .tywi file, find any corresponding .extra.* files
+-- and shovel them into a map by extension. For example:
+--
+--   Map.fromList [ ("hs", "instance Monoid Foobar where...")
+--                , ("purs", "instance monoidFoobar :: Monoid Foobar where...")]
+--
+loadExtraCode :: FilePath -> IO (M.Map T.Text T.Text)
+loadExtraCode fp = do
+  files <- glob (fp -<.> "extra.*")
+  fmap M.fromList . forM files $ \file -> do
+    let extension = T.pack $ tail (takeExtension file) -- tail: drop the leading period
+    contents <- T.readFile file
+    return (extension, contents)
+
 
 loadModuleFp :: FilePath -> ExceptT String IO Module
 loadModuleFp fp =
     do m <- liftIO $ moduleFromFile fp
+       extraCode <- liftIO $ loadExtraCode fp
        case m of
          Left err -> throwError err
-         Right ok -> return ok
+         Right ok -> return $ ok { m_extraCode = extraCode }

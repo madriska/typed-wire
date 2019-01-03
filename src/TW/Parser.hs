@@ -59,7 +59,7 @@ parseModule =
        _ <- semi
        imports <- many parseImport
        tyDefs <- many ((Left <$> parseTypeDef) <|> (Right <$> parseApiDef))
-       return $ Module moduleName imports (lefts tyDefs) (rights tyDefs)
+       return $ Module moduleName imports (lefts tyDefs) (rights tyDefs) mempty -- last arg (m_extraCode) will be filled in by the Loader
 
 parseModuleName :: Parser ModuleName
 parseModuleName =
