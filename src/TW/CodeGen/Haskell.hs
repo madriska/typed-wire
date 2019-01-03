@@ -172,8 +172,8 @@ makeTypeDef td =
           makeStructDef sd
 
 makeFieldPrefix :: TypeName -> T.Text
-makeFieldPrefix (TypeName name) =
-    (T.toLower $ T.filter isUpper name) <> "_"
+makeFieldPrefix (TypeName name) = "" -- bradediger: DuplicateRecordFields
+    --(T.toLower $ T.filter isUpper name) <> "_"
 
 makeStructDef :: StructDef -> T.Text
 makeStructDef sd =
