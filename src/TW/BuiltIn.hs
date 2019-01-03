@@ -3,6 +3,7 @@ module TW.BuiltIn
     ( BuiltIn(..)
     , allBuiltIns, isBuiltIn, builtInAsType, pathPieceTypes, isPathPiece
     , tyString, tyInt, tyFloat, tyBool, tyMaybe, tyBytes, tyList, tyDateTime, tyDate, tyTime
+    , tyMap, tySet, tyPair
     )
 where
 
@@ -21,7 +22,7 @@ builtInAsType :: BuiltIn -> Type
 builtInAsType (BuiltIn qt args) = TyCon qt (map TyVar args)
 
 allBuiltIns :: [BuiltIn]
-allBuiltIns = [tyString, tyInt, tyFloat, tyBool, tyMaybe, tyBytes, tyList, tyDateTime, tyDate, tyTime]
+allBuiltIns = [tyString, tyInt, tyFloat, tyBool, tyMaybe, tyBytes, tyList, tySet, tyDateTime, tyDate, tyTime, tyMap, tyPair]
 
 pathPieceTypes :: [BuiltIn]
 pathPieceTypes = [tyString, tyInt, tyFloat, tyBool]
@@ -63,6 +64,9 @@ tyMaybe = builtInVars "Maybe" ["a"]
 tyList :: BuiltIn
 tyList = builtInVars "List" ["a"]
 
+tySet :: BuiltIn
+tySet = builtInVars "Set" ["a"]
+
 tyBytes :: BuiltIn
 tyBytes = builtIn "Bytes"
 
@@ -77,3 +81,9 @@ tyDate = builtIn "Date"
 -- | Time type, format: HH:MM:SS
 tyTime :: BuiltIn
 tyTime = builtIn "Time"
+
+tyMap :: BuiltIn
+tyMap = builtInVars "Map" ["k", "v"]
+
+tyPair :: BuiltIn
+tyPair = builtInVars "Pair" ["a", "b"]

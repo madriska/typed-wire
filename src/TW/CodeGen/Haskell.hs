@@ -18,6 +18,7 @@ import Data.Maybe
 import Data.Monoid
 import System.FilePath
 import qualified Data.List as L
+import qualified Data.Map as M
 import qualified Data.Text as T
 
 libraryInfo :: LibraryInfo
@@ -47,6 +48,8 @@ makeModule m =
     , "import Control.Applicative"
     , "import Control.Monad (join)"
     , "import Data.Time"
+    , "import Data.Map.Strict as Map"
+    , "import Data.Set as Set"
     , "import qualified Data.Aeson as " <> aesonQual
     , "import qualified Data.Text as T"
     , "import qualified Data.Vector as V"
@@ -201,11 +204,19 @@ makeStructDef sd =
           in case sf_type fld of
                (TyCon q _) | q == (bi_name tyMaybe) ->
                   "(join <$> (obj " <> aeson ".:?" <> " " <> T.pack (show name) <> "))"
+               (TyCon q _) | q == (bi_name tySet) ->
+                  "(Set.fromList <$> (obj " <> aeson ".:" <> " " <> T.pack (show name) <> "))"
+               (TyCon q _) | q == (bi_name tyMap) ->
+                  "(Map.fromList <$> (obj " <> aeson ".:" <> " " <> T.pack (show name) <> "))"
                _ -> "obj " <> aeson ".:" <> " " <> T.pack (show name)
       makeToJsonFld fld =
           let name = unFieldName $ sf_name fld
               argName = jArg fld
-          in "(" <> T.pack (show name) <> " " <> aeson ".=" <> " " <> argName <> ")"
+          in "(" <> T.pack (show name) <> " " <> aeson ".=" <> " " <> toJSONMangle fld argName <> ")"
+      toJSONMangle fld name = case sf_type fld of
+        (TyCon q _) | q == (bi_name tyMap) -> "(Map.toList " <> name <> ")"
+        (TyCon q _) | q == (bi_name tyMap) -> "(Set.toList " <> name <> ")"
+        _ -> name
       funArgs =
           T.intercalate " " $ map jArg (sd_fields sd)
       fullType =
@@ -287,6 +298,9 @@ makeType t =
           | bi == tyDateTime -> "UTCTime"
           | bi == tyTime -> "TimeOfDay"
           | bi == tyDate -> "Day"
+          | bi == tyPair -> "(" <> T.intercalate "," (map makeType tvars) <> ")"
+          | bi == tyMap -> "(Map " <> T.intercalate " " (map makeType tvars) <> ")"
+          | bi == tySet -> "(Set " <> T.intercalate " " (map makeType tvars) <> ")"
           | otherwise ->
               error $ "Haskell: Unimplemented built in type: " ++ show t
 

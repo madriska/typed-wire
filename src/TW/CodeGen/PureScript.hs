@@ -34,7 +34,10 @@ makeModule m =
     , ""
     , T.intercalate "\n" (map makeImport $ m_imports m)
     , ""
+    , "import Data.Argonaut"
     , "import Data.TypedWire.Prelude"
+    , "import Data.Set as Set"
+    , "import Data.Map as Map"
     , if not (null (m_apis m)) then "import Data.TypedWire.Api" else ""
     , ""
     , T.intercalate "\n" (map makeTypeDef $ m_typeDefs m)
@@ -86,8 +89,8 @@ makeApiDef ad =
           <> (maybe "" (const "reqBody ") $ aed_req ep)
           <> "runRequest = do"
         , Just $ "    let coreHeaders = [" <> T.intercalate ", " (map (headerPacker "apiHeaders") $ ad_headers ad) <> "]"
-        , Just $ "    let fullHeaders = coreHeaders ++ [" <> T.intercalate ", " (map (headerPacker "endpointHeaders") $ aed_headers ep) <> "]"
-        , Just $ "    let url = " <> T.intercalate " ++ \"/\" ++ " (map urlPacker routeInfo)
+        , Just $ "    let fullHeaders = coreHeaders <> [" <> T.intercalate ", " (map (headerPacker "endpointHeaders") $ aed_headers ep) <> "]"
+        , Just $ "    let url = " <> T.intercalate " <> \"/\" <> " (map urlPacker routeInfo)
         , Just $ "    let method = " <> T.pack (show $ aed_verb ep)
         , Just $ "    let body = " <> (maybe "Nothing" (const "Just $ encodeJson reqBody") $ aed_req ep)
         , Just $ "    let req = { headers: fullHeaders, method: method, body: body, url: url }"
@@ -123,6 +126,7 @@ makeImport NativeImport{importName} = "import " <> printModuleName importName
 -- makeImport NativeImport{importName, qualifiedName=Just q} =
 --   "import qualified " <> printModuleName importName <> " as " <> printModuleName q
 -- Qualify the imports (import A.B as A.B) so we can refer to A.B.Foobar.
+-- TODO de-qualify the import
 makeImport TWImport{importName} = "import " <> printModuleName importName <> " as " <> printModuleName importName
 
 makeTypeDef :: TypeDef -> T.Text
@@ -142,8 +146,14 @@ encoderName ty = "enc" <> unTypeName ty
 eqName :: TypeName -> T.Text
 eqName ty = "eq" <> unTypeName ty
 
+ordName :: TypeName -> T.Text
+ordName ty = "ord" <> unTypeName ty
+
 showName :: TypeName -> T.Text
 showName ty = "show" <> unTypeName ty
+
+genericName :: TypeName -> T.Text
+genericName ty = "generic" <> unTypeName ty
 
 makeStructDef :: StructDef -> T.Text
 makeStructDef sd =
@@ -187,14 +197,14 @@ makeStructDef sd =
           let name = unFieldName $ sf_name fld
           in case sf_type fld of
                (TyCon q _) | q == bi_name tyMaybe ->
-                  "v" <> name <> " <- objT .?? " <> T.pack (show name)
+                  "v" <> name <> " <- objT .:? " <> T.pack (show name)
                _ ->
-                  "v" <> name <> " <- objT .? " <> T.pack (show name)
+                  "v" <> name <> " <- objT .: " <> T.pack (show name)
       makeToJsonFld fld =
           let name = unFieldName $ sf_name fld
           in T.pack (show name) <> " " <> ":=" <> " objT." <> name
       justType = unTypeName (sd_name sd)
-      fullType =
+      fullType = T.strip $
           unTypeName (sd_name sd) <> " " <> T.intercalate " " (map unTypeVar $ sd_args sd)
 
 makeStructField :: StructField -> T.Text
@@ -215,10 +225,8 @@ makeEnumDef ed =
     [ "data " <> fullType
     , "   = " <> T.intercalate "\n   | " (map makeEnumChoice $ ed_choices ed)
     , ""
-    , "instance " <> eqName (ed_name ed) <> " :: "
-      <> tcPreds (ed_args ed) ["Eq"] <> "Eq (" <> fullType <> ") where "
-    , "    " <> T.intercalate "\n    " (map makeChoiceEq $ ed_choices ed)
-    , "    eq _ _ = false"
+    , "derive instance " <> eqName (ed_name ed) <> " :: Eq (" <> fullType <> ")"
+    , "derive instance " <> ordName (ed_name ed) <> " :: Ord (" <> fullType <> ")"
     , "instance " <> showName (ed_name ed) <> " :: "
       <> tcPreds (ed_args ed) ["Show"] <> "Show (" <> fullType <> ") where "
     , "    " <> T.intercalate "\n    " (map makeChoiceShow $ ed_choices ed)
@@ -238,7 +246,7 @@ makeEnumDef ed =
           let constr = unChoiceName $ ec_name ec
           in case ec_arg ec of
                  Nothing -> "show (" <> constr <> ") = " <> T.pack (show constr)
-                 Just _ -> "show (" <> constr <> " a) = " <> T.pack (show constr) <> " ++ \" \" ++ show a"
+                 Just _ -> "show (" <> constr <> " a) = " <> T.pack (show constr) <> " <> \" \" <> show a"
       makeChoiceEq ec =
           let constr = unChoiceName $ ec_name ec
           in case ec_arg ec of
@@ -251,7 +259,7 @@ makeEnumDef ed =
                   case ec_arg ec of
                     Nothing -> ("<$ (eatBool <$> (", "))")
                     Just _ -> ("<$>", "")
-          in "(" <> constr <> " " <> op <> " objT " <> ".?" <> " " <> T.pack (show tag) <> opEnd <> ")"
+          in "(" <> constr <> " " <> op <> " objT " <> ".:" <> " " <> T.pack (show tag) <> opEnd <> ")"
       mkToJsonChoice ec =
           let constr = unChoiceName $ ec_name ec
               tag = camelTo2 '_' $ T.unpack constr
@@ -290,8 +298,11 @@ makeType t =
           | bi == tyDateTime -> "DateTime"
           | bi == tyTime -> "TimeOfDay"
           | bi == tyDate -> "Day"
+          | bi == tyPair -> "(Tuple " <> T.intercalate " " (map makeType tvars) <> ")"
+          | bi == tyMap -> "(Map " <> T.intercalate " " (map makeType tvars) <> ")"
+          | bi == tySet -> "(Set " <> T.intercalate " " (map makeType tvars) <> ")"
           | otherwise ->
-              error $ "Haskell: Unimplemented built in type: " ++ show t
+              error $ "PureScript: Unimplemented built in type: " ++ show t
 
 makeQualTypeName :: QualTypeName -> T.Text
 makeQualTypeName qtn =
