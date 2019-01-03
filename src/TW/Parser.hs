@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module TW.Parser
     ( moduleFromText
     , moduleFromFile
@@ -65,12 +66,26 @@ parseModuleName =
     lexeme $
     ModuleName <$> dotSep1 parseCapitalized
 
-parseImport :: Parser ModuleName
-parseImport =
-    do reserved "import"
-       m <- parseModuleName
-       _ <- semi
-       return m
+
+-- 'native' is a way to shove some more imports into the generated type stubs:
+--
+--   import OtherType                       --> depends on OtherType.tywi
+--   import native OtherType                --> emits 'import OtherType'
+--
+-- Note that the 'native' forms require all of your languages to share the
+-- same module name.
+parseImport :: Parser Import
+parseImport = do
+  reserved "import"
+  let
+    parseNativeImport = do
+      reserved "native"
+      importName <- parseModuleName
+      return NativeImport{importName}--, qualifiedName=Nothing}
+    parseTWImport = TWImport <$> parseModuleName
+  m <- parseNativeImport <|> parseTWImport
+  _ <- semi
+  return m
 
 parseApiDef :: Parser ApiDef
 parseApiDef =

@@ -55,9 +55,9 @@ makeModule m =
     , T.intercalate "\n" (map makeApiDef $ m_apis m)
     ]
 
-makeImport :: ModuleName -> T.Text
-makeImport m =
-    "import qualified " <> printModuleName m
+makeImport :: Import -> T.Text
+makeImport NativeImport{importName} = "import " <> printModuleName importName
+makeImport TWImport{importName} = "import qualified " <> printModuleName importName
 
 makeApiDef :: ApiDef -> T.Text
 makeApiDef ad =

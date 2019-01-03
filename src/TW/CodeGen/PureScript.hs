@@ -114,9 +114,12 @@ makeApiDef ad =
               True -> Just $ makeHeaderType (headerType ep) (aed_headers ep)
               False -> Nothing
 
-makeImport :: ModuleName -> T.Text
-makeImport m =
-    "import qualified " <> printModuleName m <> " as " <> printModuleName m
+makeImport :: Import -> T.Text
+makeImport NativeImport{importName} = "import " <> printModuleName importName
+-- makeImport NativeImport{importName, qualifiedName=Just q} =
+--   "import qualified " <> printModuleName importName <> " as " <> printModuleName q
+-- Qualify the imports (import A.B as A.B) so we can refer to A.B.Foobar.
+makeImport TWImport{importName} = "import " <> printModuleName importName <> " as " <> printModuleName importName
 
 makeTypeDef :: TypeDef -> T.Text
 makeTypeDef td =

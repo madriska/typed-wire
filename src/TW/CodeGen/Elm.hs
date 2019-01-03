@@ -59,9 +59,8 @@ makeModule v m =
     , T.intercalate "\n" (map makeTypeDef $ m_typeDefs m)
     ]
 
-makeImport :: ModuleName -> T.Text
-makeImport m =
-    "import " <> printModuleName m
+makeImport :: Import -> T.Text
+makeImport i = "import " <> printModuleName (importName i)
 
 makeTypeDef :: TypeDef -> T.Text
 makeTypeDef td =

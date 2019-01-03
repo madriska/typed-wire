@@ -45,10 +45,15 @@ data QualTypeName
    , qtn_type :: TypeName
    } deriving (Show, Eq, Ord)
 
+data Import
+   = TWImport { importName :: ModuleName }
+   | NativeImport { importName :: ModuleName }
+   deriving (Show, Eq, Ord)
+
 data Module
    = Module
    { m_name :: ModuleName
-   , m_imports :: [ModuleName]
+   , m_imports :: [Import]
    , m_typeDefs :: [TypeDef]
    , m_apis :: [ApiDef]
    } deriving (Show, Eq)

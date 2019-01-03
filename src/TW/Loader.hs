@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module TW.Loader where
 
 import TW.Ast
@@ -15,6 +16,11 @@ loadModules :: [FilePath] -> [ModuleName] -> IO (Either String [Module])
 loadModules srcDirs entryPoints =
     runExceptT $ loadLoop srcDirs S.empty (S.fromList entryPoints) []
 
+twModuleNames :: [Import] -> [ModuleName]
+twModuleNames = mapMaybe $ \case
+  TWImport m -> Just m
+  _ -> Nothing
+
 loadLoop :: [FilePath] -> S.Set ModuleName -> S.Set ModuleName -> [Module] -> ExceptT String IO [Module]
 loadLoop srcDirs visited queue accum =
     case S.toList queue of
@@ -26,7 +32,7 @@ loadLoop srcDirs visited queue accum =
                     throwError $ "Wrong module name found in " ++ filePath ++ ": "
                                ++ T.unpack (printModuleName $ m_name loaded)
              let visited' = S.insert (m_name loaded) visited
-                 queue' = S.fromList (m_imports loaded) `S.union` S.fromList xs
+                 queue' = S.fromList (twModuleNames $ m_imports loaded) `S.union` S.fromList xs
              loadLoop srcDirs visited' (queue' `S.difference` visited') (loaded : accum)
 
 getModuleFp :: [FilePath] -> ModuleName -> ExceptT String IO (ModuleName -> Bool, FilePath)

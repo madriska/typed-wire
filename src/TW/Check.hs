@@ -79,13 +79,16 @@ checkModules modules =
       getDefinedTypes m =
           do importedTypes <-
                  forM (m_imports m) $ \im ->
-                 case M.lookup im moduleMap of
-                   Nothing ->
-                       throwError $
-                       "Unknown module " ++ printModuleNameS im
-                       ++ " referenced from " ++ (printModuleNameS $ m_name m)
-                   Just imModel ->
-                       return $ map (typeDefToDefTy (Just im)) $ m_typeDefs imModel
+                 case im of
+                   NativeImport{} -> return []
+                   TWImport twImportName ->
+                     case M.lookup twImportName moduleMap of
+                       Nothing ->
+                           throwError $
+                           "Unknown module " ++ printModuleNameS twImportName
+                           ++ " referenced from " ++ (printModuleNameS $ m_name m)
+                       Just imModel ->
+                           return $ map (typeDefToDefTy (Just twImportName)) $ m_typeDefs imModel
              return $ concat importedTypes
                         ++ (map (typeDefToDefTy Nothing) $ m_typeDefs m)
                         ++ map builtInToDefTy allBuiltIns
