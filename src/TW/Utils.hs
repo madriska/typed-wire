@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module TW.Utils where
 
-import Data.Char
+import Data.Char (toUpper, toLower, isAlphaNum)
 import qualified Data.Text as T
 
 capitalizeText :: T.Text -> T.Text
@@ -20,3 +20,8 @@ uncapitalizeText =
 
 makeSafePrefixedFieldName :: T.Text -> T.Text
 makeSafePrefixedFieldName = T.filter isAlphaNum
+
+parenthesize :: T.Text -> T.Text
+parenthesize t
+  | " " `T.isInfixOf` t = "(" <> t <> ")"
+  | otherwise = t

@@ -31,6 +31,8 @@ typeDefToDefTy qualOwner td =
              DefinedType (mkTy (ed_name ed)) (ed_args ed)
          TypeDefStruct sd ->
              DefinedType (mkTy (sd_name sd)) (sd_args sd)
+         TypeDefNewtype nd ->
+             DefinedType (mkTy (nd_name nd)) (nd_args nd)
 
 checkModules :: [Module] -> Either String [Module]
 checkModules modules =
@@ -69,6 +71,8 @@ checkModules modules =
              TypeDefStruct sd ->
                  forM_ (sd_fields sd) $ \fld ->
                  isValidType (sd_args sd) (sf_type fld)
+             TypeDefNewtype nd ->
+                 isValidType (nd_args nd) (sf_type (nd_field nd))
        forM_ (m_apis m) $ \api ->
           forM_ (ad_endpoints api) $ \ep ->
           do mapM_ (isValidType []) (aed_req ep)

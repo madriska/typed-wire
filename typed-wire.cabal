@@ -6,17 +6,18 @@ homepage:            http://github.com/typed-wire/typed-wire#readme
 license:             MIT
 license-file:        LICENSE
 author:              Alexander Thiemann <mail@athiemann.net>
-maintainer:          Alexander Thiemann <mail@athiemann.net>
+maintainer:          Alexander Thiemann <mail@athiemann.net>, Brad Ediger <brad.ediger@madriska.com>
 copyright:           (c) 2015 - 2016 Alexander Thiemann <mail@athiemann.net>
 category:            Web
 build-type:          Simple
 extra-source-files:
     README.md
 cabal-version:       >=1.10
-tested-with:         GHC==7.10.2
+tested-with:         GHC==8.6.3
 
 library
   hs-source-dirs:      src
+  ghc-options:         -Wall
   exposed-modules:
                   TW.Parser,
                   TW.Ast,
@@ -81,4 +82,4 @@ test-suite typed-wire-tests
 
 source-repository head
   type:     git
-  location: https://github.com/typed-wire/typed-wire
+  location: https://github.com/madriska/typed-wire

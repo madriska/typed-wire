@@ -36,11 +36,11 @@ mainTemplate =
 stackTemplate :: T.Text
 stackTemplate =
   T.unlines
-  [ "resolver: lts-3.10"
+  [ "resolver: lts-13.1"
   , "packages:"
   , "- '.'"
   , "extra-deps:"
-  , "- Spock-0.10.0.1"
+  , "- Spock-0.13.0.0"
   , "- " <> li_name HS.libraryInfo <> "-" <> li_version HS.libraryInfo
   ]
 
@@ -70,6 +70,7 @@ cabalTemplate =
   , "  build-depends:"
   , "                base >= 4.7 && < 5"
   , "              , aeson"
+  , "              , containers"
   , "              , time"
   , "              , text"
   , "              , vector"

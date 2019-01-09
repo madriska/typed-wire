@@ -53,7 +53,8 @@ bowerTemplate =
   , "dependencies" .=
       A.object
       [ (li_name PS.libraryInfo) .= (li_version PS.libraryInfo)
-      , "purescript-console" .= T.pack "0.1.1"
+      , "purescript-console" .= T.pack "3.2.1"
+      , "purescript-ordered-collections" .= T.pack "1.4.0"
       ]
   , "repository" .=
        A.object
@@ -72,13 +73,13 @@ test_pureScriptCodeGen =
      mapM_ (runner srcDir PS.makeModule PS.makeFileName) checkedModules
      T.writeFile (dir </> "bower.json") bowerTemplate
      T.writeFile (srcDir </> "Main.purs") mainTemplate
-     let pDeps =
-           (shell "pulp dep install")
-           { cwd = Just dir
-           }
-     (_, _, _, hDeps) <- createProcess pDeps
-     ecDeps <- waitForProcess hDeps
-     assertEqual ExitSuccess ecDeps
+     -- let pDeps =
+     --       (shell "pulp install")
+     --       { cwd = Just dir
+     --       }
+     -- (_, _, _, hDeps) <- createProcess pDeps
+     -- ecDeps <- waitForProcess hDeps
+     -- assertEqual ExitSuccess ecDeps
      let p =
            (shell "pulp build")
            { cwd = Just dir

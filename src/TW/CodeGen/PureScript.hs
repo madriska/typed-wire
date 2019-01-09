@@ -34,7 +34,6 @@ makeModule m =
     , ""
     , T.intercalate "\n" (map makeImport $ m_imports m)
     , ""
-    , "import Data.Argonaut"
     , "import Data.TypedWire.Prelude"
     , "import Data.Set as Set"
     , "import Data.Map as Map"
@@ -136,6 +135,8 @@ makeTypeDef td =
           makeEnumDef ed
       TypeDefStruct sd ->
           makeStructDef sd
+      TypeDefNewtype nd ->
+          makeNewtypeDef nd
 
 decoderName :: TypeName -> T.Text
 decoderName ty = "dec" <> unTypeName ty
@@ -143,53 +144,91 @@ decoderName ty = "dec" <> unTypeName ty
 encoderName :: TypeName -> T.Text
 encoderName ty = "enc" <> unTypeName ty
 
-eqName :: TypeName -> T.Text
-eqName ty = "eq" <> unTypeName ty
-
-ordName :: TypeName -> T.Text
-ordName ty = "ord" <> unTypeName ty
-
 showName :: TypeName -> T.Text
 showName ty = "show" <> unTypeName ty
 
-genericName :: TypeName -> T.Text
-genericName ty = "generic" <> unTypeName ty
+-- | Full type name, including any type parameters.
+fullType :: TypeName -> [TypeVar] -> T.Text
+fullType name vars =
+  T.strip $ unTypeName name <> " " <> T.intercalate " " (map unTypeVar vars)
+
+deriveInstance, deriveNewtypeInstance :: T.Text -> TypeName -> [TypeVar] -> T.Text
+deriveInstance = deriveAnyInstance ""
+deriveNewtypeInstance = deriveAnyInstance "newtype"
+
+deriveAnyInstance :: T.Text -> T.Text -> TypeName -> [TypeVar] -> T.Text
+deriveAnyInstance qual cls name vars =
+  T.unwords [ "derive", qual, "instance", instanceName, "::", cls
+            , parenthesize typeConstructor]
+  where
+    instanceName = T.toLower cls <> unTypeName name
+    typeConstructor = fullType name vars
+
+-- | As 'deriveInstance', but with an extra inferred type parameter. Used for
+-- Generic and Newtype, which have an inferrable parameter (respectively, the
+-- 'rep' and the wrapped type) in the final position.
+deriveInstance1 :: T.Text -> TypeName -> [TypeVar] -> T.Text
+deriveInstance1 c n a = deriveInstance c n a <> " _"
+
+-- | Generate bare newtypes for 'newtype' declarations.
+makeNewtypeDef :: NewtypeDef -> T.Text
+makeNewtypeDef NewtypeDef{nd_name, nd_args, nd_field} =
+  T.unlines
+  [ T.unwords ["newtype", typeConstructor, "=", dataConstructor, wrappedType ]
+  , deriveInstance "Eq" nd_name nd_args
+  , deriveInstance "Ord" nd_name nd_args
+  , deriveInstance1 "Newtype" nd_name nd_args
+  , deriveNewtypeInstance "DecodeJson" nd_name nd_args
+  , deriveNewtypeInstance "EncodeJson" nd_name nd_args
+  , T.unwords [ "instance", showInstanceName
+              , "::", "Show", parenthesize typeConstructor, "where" ]
+    -- show (C x) = "(C " <> show x <> ")"
+  , "  show (" <> dataConstructor <> " x) = \"(" <> dataConstructor <> " \" <> show x <> \")\""
+  , ""
+  -- The eliminator is taken from the struct name:
+  --   newtype Foo { unFoo: Int; }
+  , T.unwords [ eliminator, "::", typeConstructor, "->", wrappedType ]
+  , T.unwords [ eliminator, "(" <> dataConstructor <> " wrapped) = wrapped"]
+  ]
+  where
+    eliminator = unFieldName $ sf_name nd_field
+    typeConstructor = parenthesize $ fullType nd_name nd_args
+    wrappedType = parenthesize $ makeType (sf_type nd_field)
+    dataConstructor = unTypeName nd_name
+    showInstanceName = "show" <> dataConstructor
 
 makeStructDef :: StructDef -> T.Text
-makeStructDef sd =
+makeStructDef StructDef{sd_name, sd_args, sd_fields} =
     T.unlines
-    [ "data " <> fullType
-    , "   = " <> unTypeName (sd_name sd)
-    , "   { " <> T.intercalate "\n   , " (map makeStructField $ sd_fields sd)
+    [ "data " <> fullType sd_name sd_args
+    , "   = " <> justType
+    , "   { " <> T.intercalate "\n   , " (map makeStructField sd_fields)
     , "   }"
     , ""
-    , "derive instance " <> eqName (sd_name sd) <> " :: Eq (" <> fullType <> ")"
-    , "derive instance " <> ordName (sd_name sd) <> " :: Ord (" <> fullType <> ")"
-    , "derive instance " <> genericName (sd_name sd) <> " :: Generic (" <> fullType <> ") _"
-    , "instance " <> showName (sd_name sd) <> " :: "
-      <> tcPreds (sd_args sd) ["Show"] <> "Show (" <> fullType <> ") where "
+    , deriveInstance "Eq" sd_name sd_args
+    , deriveInstance "Ord" sd_name sd_args
+    , deriveInstance1 "Generic" sd_name sd_args
+    , "instance " <> showName sd_name <> " :: "
+      <> tcPreds sd_args ["Show"] <> "Show (" <> fullType sd_name sd_args <> ") where "
       <> "show (" <> justType <> " a) = " <> T.pack (show justType) <> " <> \"{\" <> "
-      <> T.intercalate " <> \", \" <> " (map makeFieldShow (sd_fields sd))
+      <> T.intercalate " <> \", \" <> " (map makeFieldShow sd_fields)
       <> " <> \"}\""
-    , "instance " <> encoderName (sd_name sd) <> " :: "
-      <> tcPreds (sd_args sd) ["EncodeJson"] <> "EncodeJson" <> " (" <> fullType <> ") where"
-    , "    encodeJson (" <> unTypeName (sd_name sd) <> " objT) ="
-    , "        " <> T.intercalate "\n         ~> " (map makeToJsonFld $ sd_fields sd)
+    , "instance " <> encoderName sd_name <> " :: "
+      <> tcPreds sd_args ["EncodeJson"] <> "EncodeJson" <> " (" <> fullType sd_name sd_args <> ") where"
+    , "    encodeJson (" <> unTypeName sd_name <> " objT) ="
+    , "        " <> T.intercalate "\n         ~> " (map makeToJsonFld sd_fields)
     , "        ~> jsonEmptyObject"
-    , "instance " <> decoderName (sd_name sd) <> " :: "
-      <> tcPreds (sd_args sd) ["DecodeJson"] <> "DecodeJson" <> " (" <> fullType <> ") where"
+    , "instance " <> decoderName sd_name <> " :: "
+      <> tcPreds sd_args ["DecodeJson"] <> "DecodeJson" <> " (" <> fullType sd_name sd_args <> ") where"
     , "    decodeJson jsonT = do"
     , "        objT <- decodeJson jsonT"
-    , "        " <> T.intercalate "\n        " (map makeFromJsonFld $ sd_fields sd)
-    , "        pure $ " <> unTypeName (sd_name sd) <> " { " <> T.intercalate ", " (map makeFieldSetter $ sd_fields sd) <> " }"
+    , "        " <> T.intercalate "\n        " (map makeFromJsonFld sd_fields)
+    , "        pure $ " <> unTypeName sd_name <> " { " <> T.intercalate ", " (map makeFieldSetter sd_fields) <> " }"
     ]
     where
       makeFieldShow fld =
           let name = unFieldName $ sf_name fld
           in  T.pack (show name) <> " <> \": \" <> show a." <> name
-      makeFieldEq fld =
-          let name = unFieldName $ sf_name fld
-          in  "a." <> name <> " == " <> "b." <> name
       makeFieldSetter fld =
           let name = unFieldName $ sf_name fld
           in name <> " : " <> "v" <> name
@@ -203,9 +242,7 @@ makeStructDef sd =
       makeToJsonFld fld =
           let name = unFieldName $ sf_name fld
           in T.pack (show name) <> " " <> ":=" <> " objT." <> name
-      justType = unTypeName (sd_name sd)
-      fullType = T.strip $
-          unTypeName (sd_name sd) <> " " <> T.intercalate " " (map unTypeVar $ sd_args sd)
+      justType = unTypeName sd_name
 
 makeStructField :: StructField -> T.Text
 makeStructField sf =
@@ -220,26 +257,27 @@ tcPreds args tyClasses =
          in "(" <> T.intercalate "," (map mkPred args) <> ") => "
 
 makeEnumDef :: EnumDef -> T.Text
-makeEnumDef ed =
+makeEnumDef EnumDef{ed_name, ed_args, ed_choices} =
     T.unlines
-    [ "data " <> fullType
-    , "   = " <> T.intercalate "\n   | " (map makeEnumChoice $ ed_choices ed)
+    [ "data " <> fullType ed_name ed_args
+    , "   = " <> T.intercalate "\n   | " (map makeEnumChoice ed_choices)
     , ""
-    , "derive instance " <> eqName (ed_name ed) <> " :: Eq (" <> fullType <> ")"
-    , "derive instance " <> ordName (ed_name ed) <> " :: Ord (" <> fullType <> ")"
-    , "instance " <> showName (ed_name ed) <> " :: "
-      <> tcPreds (ed_args ed) ["Show"] <> "Show (" <> fullType <> ") where "
-    , "    " <> T.intercalate "\n    " (map makeChoiceShow $ ed_choices ed)
-    , "instance " <> encoderName (ed_name ed) <> " :: "
-      <> tcPreds (ed_args ed) ["EncodeJson"] <> "EncodeJson" <> " (" <> fullType <> ") where"
+    , deriveInstance "Eq" ed_name ed_args
+    , deriveInstance "Ord" ed_name ed_args
+    , deriveInstance1 "Generic" ed_name ed_args
+    , "instance " <> showName ed_name <> " :: "
+      <> tcPreds ed_args ["Show"] <> "Show (" <> fullType ed_name ed_args <> ") where "
+    , "    " <> T.intercalate "\n    " (map makeChoiceShow ed_choices)
+    , "instance " <> encoderName ed_name <> " :: "
+      <> tcPreds ed_args ["EncodeJson"] <> "EncodeJson" <> " (" <> fullType ed_name ed_args <> ") where"
     , "    encodeJson x ="
     , "        case x of"
-    , "          " <> T.intercalate "\n          " (map mkToJsonChoice $ ed_choices ed)
-    , "instance " <> decoderName (ed_name ed) <> " :: "
-      <> tcPreds (ed_args ed) ["DecodeJson"] <> "DecodeJson" <> " (" <> fullType <> ") where"
+    , "          " <> T.intercalate "\n          " (map mkToJsonChoice ed_choices)
+    , "instance " <> decoderName ed_name <> " :: "
+      <> tcPreds ed_args ["DecodeJson"] <> "DecodeJson" <> " (" <> fullType ed_name ed_args <> ") where"
     , "    decodeJson jsonT ="
     , "        decodeJson jsonT >>= \\objT -> "
-    , "        " <> T.intercalate "\n        <|> " (map mkFromJsonChoice $ ed_choices ed)
+    , "        " <> T.intercalate "\n        <|> " (map mkFromJsonChoice ed_choices)
     ]
     where
       makeChoiceShow ec =
@@ -247,11 +285,6 @@ makeEnumDef ed =
           in case ec_arg ec of
                  Nothing -> "show (" <> constr <> ") = " <> T.pack (show constr)
                  Just _ -> "show (" <> constr <> " a) = " <> T.pack (show constr) <> " <> \" \" <> show a"
-      makeChoiceEq ec =
-          let constr = unChoiceName $ ec_name ec
-          in case ec_arg ec of
-                 Nothing -> "eq (" <> constr <> ") (" <> constr <> ") = true"
-                 Just _ -> "eq (" <> constr <> " a) (" <> constr <> " b) = a == b"
       mkFromJsonChoice ec =
           let constr = unChoiceName $ ec_name ec
               tag = camelTo2 '_' $ T.unpack constr
@@ -269,8 +302,6 @@ makeEnumDef ed =
                     Just _ -> ("y", "y")
           in constr <> " " <> argParam <> " -> "
              <> " " <> T.pack (show tag) <> " " <> " := " <> " " <> argVal <> " ~> jsonEmptyObject"
-      fullType =
-          unTypeName (ed_name ed) <> " " <> T.intercalate " " (map unTypeVar $ ed_args ed)
 
 makeEnumChoice :: EnumChoice -> T.Text
 makeEnumChoice ec =

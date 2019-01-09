@@ -99,6 +99,7 @@ data ApiHeaderValue
 data TypeDef
    = TypeDefEnum EnumDef
    | TypeDefStruct StructDef
+   | TypeDefNewtype NewtypeDef
      deriving (Show, Eq)
 
 data EnumDef
@@ -107,6 +108,13 @@ data EnumDef
    , ed_args :: [TypeVar]
    , ed_choices :: [EnumChoice]
    } deriving (Show, Eq)
+
+data NewtypeDef
+  = NewtypeDef
+  { nd_name :: TypeName
+  , nd_args :: [TypeVar]
+  , nd_field :: StructField
+  } deriving (Show, Eq)
 
 data EnumChoice
    = EnumChoice
@@ -144,6 +152,10 @@ type Foo {
 type Bar<T> {
    someField : T;
    moreFields : Int;
+}
+
+newtype Baz<K, V> {
+  wrappedField : Map<K, V>;
 }
 
 enum Psy {

@@ -138,23 +138,34 @@ parseRouteComp =
     ApiRouteDynamic <$> parseType
 
 parseTypeDef :: Parser TypeDef
-parseTypeDef =
-    TypeDefEnum <$> parseEnumDef <|>
-    TypeDefStruct <$> parseStructDef
+parseTypeDef = TypeDefEnum <$> parseEnumDef
+           <|> TypeDefStruct <$> parseStructDef
+           <|> TypeDefNewtype <$> parseNewtypeDef
 
-parseDef :: (TypeName -> [TypeVar] -> [fld] -> def) -> String -> Parser fld -> Parser def
+parseDef :: (TypeName -> [TypeVar] -> [fld] -> Parser def) -> String -> Parser fld -> Parser def
 parseDef constr resName parseFields =
     do reserved resName
        name <- parseTypeName
        args <- parseTypeArgs
        fields <- braces $ many parseFields
-       return $ constr name args fields
+       constr name args fields
+
+wrap3 :: (d -> e) -> (a -> b -> c -> d) -> a -> b -> c -> e
+wrap3 t f a b c = t (f a b c)
 
 parseEnumDef :: Parser EnumDef
-parseEnumDef = parseDef EnumDef "enum" parseEnumChoice
+parseEnumDef = parseDef (wrap3 pure EnumDef) "enum" parseEnumChoice
 
 parseStructDef :: Parser StructDef
-parseStructDef = parseDef StructDef "type" parseStructField
+parseStructDef = parseDef (wrap3 pure StructDef) "type" parseStructField
+
+parseNewtypeDef :: Parser NewtypeDef
+parseNewtypeDef = parseDef buildNewtypeDef "newtype" parseStructField
+  where
+    buildNewtypeDef n args [field] = pure $ NewtypeDef n args field
+    buildNewtypeDef n _ fields = fail $
+      "Newtypes must have exactly one field, but " <>
+      show (unTypeName n) <> " had " <> show (length fields) <> "."
 
 parseEnumChoice :: Parser EnumChoice
 parseEnumChoice =
